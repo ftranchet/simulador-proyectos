@@ -1,2 +1,2 @@
 # simulador-proyectos
-Pequeño simulador para la materia evaluación de proyectos de ivnersión
+Pequeño simulador para la materia evaluación de proyectos de inversión.
