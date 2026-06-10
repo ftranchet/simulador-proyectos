@@ -80,6 +80,14 @@
   .foot{font-size:11px;color:var(--muted);margin-top:14px;}
   .axis-cap{font-size:11px;color:var(--muted);text-align:center;margin-top:2px;}
   a{color:var(--cian);}
+  /* editor por año */
+  .yearly-tbl{font-size:12.5px;}
+  .yearly-tbl th{white-space:nowrap;padding:4px 6px;text-align:right;}
+  .yearly-tbl th.l,.yearly-tbl td.l{text-align:left;}
+  .yearly-tbl td{padding:3px 5px;border-top:1px solid var(--borde);}
+  .yearly-tbl input.yearly-in{width:78px;text-align:right;padding:3px 6px;font-size:12.5px;}
+  .yearly-tbl tbody tr:hover{background:var(--grisSoft);}
+  .mode-switch{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:14px;}
 </style>
 </head>
 <body>
@@ -130,7 +138,13 @@
       <div>
         <div class="card pad">
           <h2 class="sec">Variables del proyecto</h2>
+          <div class="mode-switch">
+            <button class="btn" id="btnMode">Editar por año ▸</button>
+            <button class="btn" id="btnRegen" style="display:none;">↻ Regenerar desde tasas</button>
+            <span id="modeHint" style="font-size:12px;color:var(--muted);"></span>
+          </div>
           <div id="controls"></div>
+          <div id="yearlyWrap" style="display:none;overflow-x:auto;margin-top:6px;"></div>
         </div>
       </div>
 
@@ -194,21 +208,30 @@ var C = { cian:"#45818E", gris:"#434343", naranja:"#E69138", rojo:"#CC0000",
 function buildCashflows(p){
   var I0=p.I0,KT=p.KT,N=p.N,vidaUtil=p.vidaUtil,precio=p.precio,cantidad=p.cantidad;
   var gp=p.gp,gq=p.gq,cv=p.cv,CF=p.CF,tax=p.tax,valorDesecho=p.valorDesecho;
+  var Y=p.yearly; // valores año por año (modo avanzado); tax en decimal
   var flows=[-(I0+KT)], detail=[];
   for(var t=1;t<=N;t++){
-    var precio_t=precio*Math.pow(1+gp,t-1);
-    var cant_t=cantidad*Math.pow(1+gq,t-1);
+    var idx=t-1;
+    var precio_t, cant_t, cv_t, CF_t, tax_t;
+    if(Y){
+      precio_t=Y.precio[idx]; cant_t=Y.cantidad[idx];
+      cv_t=Y.cv[idx]; CF_t=Y.CF[idx]; tax_t=Y.tax[idx];
+    } else {
+      precio_t=precio*Math.pow(1+gp,t-1);
+      cant_t=cantidad*Math.pow(1+gq,t-1);
+      cv_t=cv; CF_t=CF; tax_t=tax;
+    }
     var ingresos=precio_t*cant_t;
-    var cvTotal=cv*cant_t;
-    var ebitda=ingresos-cvTotal-CF;
+    var cvTotal=cv_t*cant_t;
+    var ebitda=ingresos-cvTotal-CF_t;
     var deprec=t<=vidaUtil?I0/vidaUtil:0;
     var ebit=ebitda-deprec;
-    var impuesto=ebit*tax;
+    var impuesto=ebit*tax_t;
     var un=ebit-impuesto;
     var fc=un+deprec;
     if(t===N) fc+=KT+valorDesecho;
     flows.push(fc);
-    detail.push({t:t,ingresos:ingresos,cvTotal:cvTotal,CF:CF,ebitda:ebitda,deprec:deprec,ebit:ebit,impuesto:impuesto,un:un,fc:fc});
+    detail.push({t:t,ingresos:ingresos,cvTotal:cvTotal,CF:CF_t,ebitda:ebitda,deprec:deprec,ebit:ebit,impuesto:impuesto,un:un,fc:fc});
   }
   return {flows:flows, detail:detail};
 }
@@ -297,6 +320,73 @@ var GROUPS = [
 var params = Object.assign({}, PRESETS["Planta de packaging"].data);
 var currentPreset = "Planta de packaging";
 var tableOpen = false;
+var advanced = false;            // modo "editar por año"
+var yearly = null;               // {precio:[],cantidad:[],cv:[],CF:[],tax:[]}  (tax en %)
+var OVERRIDDEN = ["precio","cantidad","gp","gq","cv","CF","tax"]; // sliders que el modo por año reemplaza
+
+/* ============ VALORES POR AÑO ============ */
+function r2(v){ return Math.round(v*100)/100; }
+function projectYearly(){
+  var N=params.N, gp=params.gp/100, gq=params.gq/100;
+  var Y={precio:[],cantidad:[],cv:[],CF:[],tax:[]};
+  for(var t=1;t<=N;t++){
+    Y.precio.push(r2(params.precio*Math.pow(1+gp,t-1)));
+    Y.cantidad.push(Math.round(params.cantidad*Math.pow(1+gq,t-1)));
+    Y.cv.push(r2(params.cv));
+    Y.CF.push(Math.round(params.CF));
+    Y.tax.push(r2(params.tax));
+  }
+  return Y;
+}
+function ensureYearly(){
+  var N=params.N;
+  if(!yearly){ yearly=projectYearly(); return; }
+  ["precio","cantidad","cv","CF","tax"].forEach(function(key){
+    var arr=yearly[key];
+    if(arr.length>N){ yearly[key]=arr.slice(0,N); }
+    else { while(arr.length<N) arr.push(arr.length?arr[arr.length-1]:params[key]); }
+  });
+}
+function buildYearlyTable(){
+  ensureYearly();
+  var cols=[
+    {k:"precio",lab:"Precio",unit:"$"},
+    {k:"cantidad",lab:"Cantidad",unit:"u"},
+    {k:"cv",lab:"Cv unit.",unit:"$"},
+    {k:"CF",lab:"C. fijos",unit:"$"},
+    {k:"tax",lab:"Impuesto",unit:"%"}
+  ];
+  var html='<table class="yearly-tbl"><thead><tr><th class="l">Año</th>';
+  cols.forEach(function(c){ html+='<th>'+c.lab+'<br><span style="font-weight:400;color:'+C.muted+'">'+c.unit+'</span></th>'; });
+  html+='</tr></thead><tbody>';
+  for(var t=1;t<=params.N;t++){
+    var idx=t-1;
+    html+='<tr><td class="l" style="font-weight:700;color:'+C.gris+'">'+t+'</td>';
+    cols.forEach(function(c){
+      html+='<td><input type="number" class="yearly-in" data-key="'+c.k+'" data-idx="'+idx+'" value="'+yearly[c.k][idx]+'"></td>';
+    });
+    html+='</tr>';
+  }
+  html+='</tbody></table>';
+  return html;
+}
+function renderYearlyTable(){
+  ensureYearly();
+  document.getElementById("yearlyWrap").innerHTML=buildYearlyTable();
+}
+function setMode(adv){
+  advanced=adv;
+  if(adv){ if(!yearly || yearly.precio.length!==params.N) yearly=projectYearly(); renderYearlyTable(); }
+  document.getElementById("yearlyWrap").style.display=adv?"block":"none";
+  document.getElementById("btnMode").textContent=adv?"◂ Volver a modo simple":"Editar por año ▸";
+  document.getElementById("btnRegen").style.display=adv?"inline-flex":"none";
+  document.getElementById("modeHint").textContent=adv?"Editás cada año a mano; las tasas de crecimiento se ignoran.":"";
+  OVERRIDDEN.forEach(function(k){
+    var d=document.getElementById("drv_"+k);
+    if(d){ d.style.opacity=adv?"0.45":"1"; d.title=adv?"En modo por año este valor se ignora (sirve para regenerar la tabla).":""; }
+  });
+  update();
+}
 
 /* ============ CONSTRUIR CONTROLES ============ */
 function buildControls(){
@@ -306,7 +396,7 @@ function buildControls(){
     html+='<h3>'+g.title+'</h3>';
     g.items.forEach(function(it){
       var r=RANGE[it.k];
-      html+='<div class="driver">'+
+      html+='<div class="driver" id="drv_'+it.k+'">'+
         '<div class="driver-top"><label>'+it.label+'</label>'+
         '<span class="driver-val"><input type="number" id="num_'+it.k+'" min="'+r.min+'" max="'+r.max+'" step="'+r.step+'"><span class="unit">'+it.unit+'</span></span></div>'+
         '<input type="range" id="rng_'+it.k+'" min="'+r.min+'" max="'+r.max+'" step="'+r.step+'" style="--accent:'+g.color+'">'+
@@ -320,8 +410,8 @@ function buildControls(){
     var num=document.getElementById("num_"+it.k);
     var rng=document.getElementById("rng_"+it.k);
     var r=RANGE[it.k];
-    num.addEventListener("input", function(){ params[it.k]=clamp(Number(num.value), r.min, r.max); syncControls(); update(); });
-    rng.addEventListener("input", function(){ params[it.k]=Number(rng.value); syncControls(); update(); });
+    num.addEventListener("input", function(){ params[it.k]=clamp(Number(num.value), r.min, r.max); syncControls(); update(); if(advanced&&it.k==="N") renderYearlyTable(); });
+    rng.addEventListener("input", function(){ params[it.k]=Number(rng.value); syncControls(); update(); if(advanced&&it.k==="N") renderYearlyTable(); });
   });});
 }
 function syncControls(){
@@ -336,6 +426,16 @@ function syncControls(){
 /* ============ CALCULO ============ */
 function compute(){
   var dec=Object.assign({},params,{gp:params.gp/100,gq:params.gq/100,tax:params.tax/100});
+  if(advanced){
+    ensureYearly();
+    dec.yearly={
+      precio:yearly.precio.slice(),
+      cantidad:yearly.cantidad.slice(),
+      cv:yearly.cv.slice(),
+      CF:yearly.CF.slice(),
+      tax:yearly.tax.map(function(v){return v/100;})
+    };
+  }
   var r=buildCashflows(dec);
   var k=params.k/100;
   var VAN=van(r.flows,k);
@@ -468,9 +568,10 @@ function buildPresetSelect(){
 function applyPreset(name){
   currentPreset=name;
   params=Object.assign({}, PRESETS[name].data);
+  yearly=null;
   buildPresetSelect();
   document.getElementById("presetNote").textContent = PRESETS[name]?PRESETS[name].nota:"";
-  syncControls(); update();
+  syncControls(); setMode(false);
 }
 
 /* ============ PERSISTENCIA (localStorage) ============ */
@@ -492,10 +593,18 @@ function renderSaved(){
 function saveProj(){
   var name=document.getElementById("saveName").value.trim();
   if(!name) return;
-  try{ localStorage.setItem("proy:"+name, JSON.stringify(params)); document.getElementById("saveName").value=""; renderSaved(); }catch(e){}
+  var payload={_v:2, params:params, advanced:advanced, yearly:advanced?yearly:null};
+  try{ localStorage.setItem("proy:"+name, JSON.stringify(payload)); document.getElementById("saveName").value=""; renderSaved(); }catch(e){}
 }
 function loadProj(name){
-  try{ var raw=localStorage.getItem("proy:"+name); if(raw){ params=JSON.parse(raw); currentPreset="— "+name; buildPresetSelect(); document.getElementById("presetNote").textContent=""; syncControls(); update(); } }catch(e){}
+  try{
+    var raw=localStorage.getItem("proy:"+name); if(!raw) return;
+    var obj=JSON.parse(raw);
+    if(obj && obj._v===2){ params=obj.params; yearly=obj.yearly||null; }
+    else { params=obj; yearly=null; } // formato anterior: solo params
+    currentPreset="— "+name; buildPresetSelect(); document.getElementById("presetNote").textContent="";
+    syncControls(); setMode(!!(obj&&obj._v===2&&obj.advanced));
+  }catch(e){}
 }
 function delProj(name){ try{ localStorage.removeItem("proy:"+name); renderSaved(); }catch(e){} }
 
@@ -508,6 +617,15 @@ update();
 
 document.getElementById("presetSelect").addEventListener("change", function(e){ if(e.target.value) applyPreset(e.target.value); });
 document.getElementById("btnReset").addEventListener("click", function(){ if(PRESETS[currentPreset]) applyPreset(currentPreset); });
+document.getElementById("btnMode").addEventListener("click", function(){ setMode(!advanced); });
+document.getElementById("btnRegen").addEventListener("click", function(){ yearly=projectYearly(); renderYearlyTable(); update(); });
+document.getElementById("yearlyWrap").addEventListener("input", function(e){
+  var inp=e.target; if(!inp.classList||!inp.classList.contains("yearly-in")) return;
+  var key=inp.dataset.key, idx=Number(inp.dataset.idx);
+  if(!yearly||!yearly[key]) return;
+  yearly[key][idx]=Number(inp.value);
+  update();
+});
 document.getElementById("tableToggle").addEventListener("click", function(){
   tableOpen=!tableOpen;
   document.getElementById("tableWrap").style.display=tableOpen?"block":"none";
