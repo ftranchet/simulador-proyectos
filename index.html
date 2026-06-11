@@ -43,6 +43,15 @@
   .chip b{color:var(--cian);cursor:pointer;}
   .chip .x{background:none;border:none;color:var(--muted);cursor:pointer;font-size:15px;line-height:1;padding:0 2px;}
   .note{font-size:13px;color:var(--muted);margin:0 0 16px;}
+  /* pestañas de proyectos */
+  .ptabs{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px;}
+  .ptab{display:inline-flex;align-items:center;gap:7px;border:1.5px solid var(--borde);background:#fff;border-radius:9px;padding:7px 12px;font-family:inherit;font-size:13px;font-weight:600;color:var(--gris);cursor:pointer;user-select:none;}
+  .ptab:hover{background:var(--grisSoft);}
+  .ptab.on{font-weight:700;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.08);}
+  .ptab .dot{width:10px;height:10px;border-radius:50%;flex:none;}
+  .ptab .ren{color:var(--muted);font-size:12px;margin-left:2px;}
+  .ptab .ren:hover{color:var(--cian);}
+  .ptab input{border:1px solid var(--borde);border-radius:6px;font-family:inherit;font-size:13px;padding:2px 6px;width:130px;}
   /* grid */
   .grid{display:grid;grid-template-columns:5fr 7fr;gap:22px;}
   @media (max-width:900px){ .grid{grid-template-columns:1fr;} }
@@ -77,6 +86,9 @@
   th{color:var(--muted);font-weight:700;text-align:right;padding:6px 8px;}
   th.l,td.l{text-align:left;}
   td{text-align:right;padding:6px 8px;border-top:1px solid var(--borde);}
+  .cmp-row{cursor:pointer;}
+  .cmp-row:hover{background:var(--grisSoft);}
+  .cmp-row.on{background:var(--cianSoft);}
   .foot{font-size:11px;color:var(--muted);margin-top:14px;}
   .axis-cap{font-size:11px;color:var(--muted);text-align:center;margin-top:2px;}
   a{color:var(--cian);}
@@ -102,7 +114,7 @@
       </div>
       <div class="verdict-grp">
         <div class="tag-right">
-          <div class="mini-lab">VAN</div>
+          <div class="mini-lab" id="vanLab">VAN</div>
           <div class="van-big" id="vanBig">—</div>
         </div>
         <div class="pill" id="verdict">—</div>
@@ -117,12 +129,22 @@
   <div class="wrap">
     <div class="toolbar">
       <div>
-        <div class="field-lab">CASO</div>
+        <div class="field-lab">PROYECTOS EN SIMULACIÓN</div>
+        <select id="countSelect">
+          <option value="1">1 proyecto</option>
+          <option value="2">2 proyectos</option>
+          <option value="3">3 proyectos</option>
+          <option value="4">4 proyectos</option>
+          <option value="5">5 proyectos</option>
+        </select>
+      </div>
+      <div>
+        <div class="field-lab" id="caseLab">CASO</div>
         <select id="presetSelect"></select>
       </div>
       <button class="btn" id="btnReset">↻ Restablecer</button>
       <div id="saveWrap" style="margin-left:auto;display:none;">
-        <div class="field-lab">GUARDAR PROYECTO</div>
+        <div class="field-lab" id="saveLab">GUARDAR PROYECTO</div>
         <div style="display:flex;gap:6px;">
           <input type="text" id="saveName" placeholder="nombre del proyecto" style="width:170px;">
           <button class="btn btn-primary" id="btnSave">Guardar</button>
@@ -130,14 +152,16 @@
       </div>
     </div>
 
+    <div class="ptabs" id="tabs" style="display:none;"></div>
+
     <div class="chips" id="savedList" style="display:none;"></div>
     <p class="note" id="presetNote"></p>
 
     <div class="grid">
       <!-- CONTROLES -->
       <div>
-        <div class="card pad">
-          <h2 class="sec">Variables del proyecto</h2>
+        <div class="card pad" id="controlsCard">
+          <h2 class="sec">Variables del proyecto<span id="varsProjTag"></span></h2>
           <div class="mode-switch">
             <button class="btn" id="btnMode">Editar por año ▸</button>
             <button class="btn" id="btnRegen" style="display:none;">↻ Regenerar desde tasas</button>
@@ -150,6 +174,13 @@
 
       <!-- RESULTADOS -->
       <div>
+        <div class="card pad" id="compareCard" style="display:none;margin-bottom:14px;">
+          <h3 class="sec" style="margin-bottom:10px;">Comparación de proyectos</h3>
+          <div style="overflow-x:auto;"><table id="compareTbl"></table></div>
+          <p class="foot" style="margin-top:8px;">Clic en una fila para activar ese proyecto y editarlo · ★ mejor VAN</p>
+        </div>
+
+        <div id="statsTitle" style="display:none;font-size:12px;color:var(--muted);font-weight:700;margin:0 0 8px;"></div>
         <div class="stats">
           <div class="stat" id="cVan"><div class="lab">VAN</div><div class="val">—</div><div class="sub"></div></div>
           <div class="stat" id="cTir"><div class="lab">TIR</div><div class="val">—</div><div class="sub"></div></div>
@@ -173,9 +204,17 @@
           <div class="axis-cap">(años)</div>
         </div>
 
+        <div class="card pad" id="paramsCard" style="display:none;">
+          <button class="table-toggle" id="paramsToggle">
+            <h3 class="sec">Parámetros comparados <span style="font-weight:400;font-size:12px;color:var(--muted)">· se resaltan las diferencias</span></h3>
+            <span id="paramsArrow" style="color:var(--muted);font-size:16px;">▾</span>
+          </button>
+          <div id="paramsWrap" style="display:none;margin-top:12px;overflow-x:auto;"></div>
+        </div>
+
         <div class="card pad" style="margin-top:14px;">
           <button class="table-toggle" id="tableToggle">
-            <h3 class="sec">Cómo se arma el flujo · <span style="color:var(--naranja)">EBITDA</span> ≠ <span style="color:var(--cian)">flujo de caja</span></h3>
+            <h3 class="sec">Cómo se arma el flujo · <span style="color:var(--naranja)">EBITDA</span> ≠ <span style="color:var(--cian)">flujo de caja</span><span id="flowProjTag"></span></h3>
             <span id="tableArrow" style="color:var(--muted);font-size:16px;">▾</span>
           </button>
           <div id="tableWrap" style="display:none;margin-top:12px;overflow-x:auto;">
@@ -201,7 +240,7 @@
 <script>
 /* ============ PALETA ============ */
 var C = { cian:"#45818E", gris:"#434343", naranja:"#E69138", rojo:"#CC0000",
-  purpura:"#674EA7", azul:"#3D85C6", cianSoft:"#EAF2F3", grisSoft:"#F4F4F4",
+  purpura:"#674EA7", azul:"#3D85C6", verde:"#6AA84F", cianSoft:"#EAF2F3", grisSoft:"#F4F4F4",
   borde:"#E2E2E2", muted:"#8A8A8A" };
 
 /* ============ MOTOR FINANCIERO (verificado) ============ */
@@ -276,6 +315,7 @@ function moneyAxis(v){ var a=Math.abs(v);
   return "$"+nf0.format(Math.round(v)); }
 function clamp(v,min,max){ return Math.min(max,Math.max(min, isNaN(v)?min:v)); }
 function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+function shortName(n){ return n.length>24?n.slice(0,23)+"…":n; }
 
 /* ============ PRESETS y RANGOS ============ */
 var PRESETS = {
@@ -318,18 +358,48 @@ var GROUPS = [
     {k:"tax",label:"Impuesto a las ganancias",unit:"%"}
   ]}
 ];
+var PARAM_UNIT={}, PARAM_LABEL={};
+GROUPS.forEach(function(g){ g.items.forEach(function(it){ PARAM_UNIT[it.k]=it.unit; PARAM_LABEL[it.k]=it.label; }); });
+function fmtParam(key,v){
+  var u=PARAM_UNIT[key];
+  var num=Number(v).toLocaleString("es-AR",{maximumFractionDigits:2});
+  if(u==="$") return "$ "+num;
+  if(u==="%") return num+" %";
+  if(u==="u") return num+" u";
+  if(u==="añ") return num+(Math.abs(v)===1?" año":" años");
+  return num;
+}
 
-/* ============ ESTADO ============ */
-var params = Object.assign({}, PRESETS["Planta de packaging"].data);
-var currentPreset = "Planta de packaging";
-var tableOpen = false;
-var advanced = false;            // modo "editar por año"
-var yearly = null;               // {precio:[],cantidad:[],cv:[],CF:[],tax:[]}  (tax en %)
+/* ============ ESTADO (multi-proyecto) ============ */
+var MAXP=5;
+var PCOLORS=[C.cian, C.naranja, C.purpura, C.azul, C.verde];
 var OVERRIDDEN = ["precio","cantidad","gp","gq","cv","CF","tax"]; // sliders que el modo por año reemplaza
+
+function newProject(name,data,preset){
+  return {name:name, preset:preset, params:Object.assign({},data), advanced:false, yearly:null, renamed:false};
+}
+function copyYearly(y){
+  if(!y) return null;
+  return {precio:y.precio.slice(), cantidad:y.cantidad.slice(), cv:y.cv.slice(), CF:y.CF.slice(), tax:y.tax.slice()};
+}
+function cloneProject(src,name){
+  var p=newProject(name, src.params, src.preset);
+  p.advanced=src.advanced;
+  p.yearly=copyYearly(src.yearly);
+  p.renamed=src.renamed;
+  return p;
+}
+var projects=[ newProject("Planta de packaging", PRESETS["Planta de packaging"].data, "Planta de packaging") ];
+var active=0;
+function P(){ return projects[active]; }
+function isMulti(){ return projects.length>1; }
+var tableOpen=false;
+var paramsOpen=false;
 
 /* ============ VALORES POR AÑO ============ */
 function r2(v){ return Math.round(v*100)/100; }
-function projectYearly(){
+function projectYearly(proj){
+  var params=proj.params;
   var N=params.N, gp=params.gp/100, gq=params.gq/100;
   var Y={precio:[],cantidad:[],cv:[],CF:[],tax:[]};
   for(var t=1;t<=N;t++){
@@ -341,17 +411,17 @@ function projectYearly(){
   }
   return Y;
 }
-function ensureYearly(){
-  var N=params.N;
-  if(!yearly){ yearly=projectYearly(); return; }
+function ensureYearly(proj){
+  var N=proj.params.N;
+  if(!proj.yearly){ proj.yearly=projectYearly(proj); return; }
   ["precio","cantidad","cv","CF","tax"].forEach(function(key){
-    var arr=yearly[key];
-    if(arr.length>N){ yearly[key]=arr.slice(0,N); }
-    else { while(arr.length<N) arr.push(arr.length?arr[arr.length-1]:params[key]); }
+    var arr=proj.yearly[key];
+    if(arr.length>N){ proj.yearly[key]=arr.slice(0,N); }
+    else { while(arr.length<N) arr.push(arr.length?arr[arr.length-1]:proj.params[key]); }
   });
 }
-function buildYearlyTable(){
-  ensureYearly();
+function buildYearlyTable(proj){
+  ensureYearly(proj);
   var cols=[
     {k:"precio",lab:"Precio",unit:"$"},
     {k:"cantidad",lab:"Cantidad",unit:"u"},
@@ -362,11 +432,11 @@ function buildYearlyTable(){
   var html='<table class="yearly-tbl"><thead><tr><th class="l">Año</th>';
   cols.forEach(function(c){ html+='<th>'+c.lab+'<br><span style="font-weight:400;color:'+C.muted+'">'+c.unit+'</span></th>'; });
   html+='</tr></thead><tbody>';
-  for(var t=1;t<=params.N;t++){
+  for(var t=1;t<=proj.params.N;t++){
     var idx=t-1;
     html+='<tr><td class="l" style="font-weight:700;color:'+C.gris+'">'+t+'</td>';
     cols.forEach(function(c){
-      html+='<td><input type="number" class="yearly-in" data-key="'+c.k+'" data-idx="'+idx+'" value="'+yearly[c.k][idx]+'"></td>';
+      html+='<td><input type="number" class="yearly-in" data-key="'+c.k+'" data-idx="'+idx+'" value="'+proj.yearly[c.k][idx]+'"></td>';
     });
     html+='</tr>';
   }
@@ -374,12 +444,12 @@ function buildYearlyTable(){
   return html;
 }
 function renderYearlyTable(){
-  ensureYearly();
-  document.getElementById("yearlyWrap").innerHTML=buildYearlyTable();
+  document.getElementById("yearlyWrap").innerHTML=buildYearlyTable(P());
 }
 function setMode(adv){
-  advanced=adv;
-  if(adv){ if(!yearly) yearly=projectYearly(); renderYearlyTable(); }
+  var proj=P();
+  proj.advanced=adv;
+  if(adv){ if(!proj.yearly) proj.yearly=projectYearly(proj); renderYearlyTable(); }
   document.getElementById("yearlyWrap").style.display=adv?"block":"none";
   document.getElementById("btnMode").textContent=adv?"◂ Volver a modo simple":"Editar por año ▸";
   document.getElementById("btnRegen").style.display=adv?"inline-flex":"none";
@@ -416,33 +486,34 @@ function buildControls(){
     num.addEventListener("input", function(){
       if(num.value===""||isNaN(Number(num.value))) return; // campo vacío mientras se tipea: no pisar el valor
       var v=clamp(Number(num.value), r.min, r.max);
-      params[it.k]=r.int?Math.round(v):v;
-      syncControls(); update(); if(advanced&&it.k==="N") renderYearlyTable();
+      P().params[it.k]=r.int?Math.round(v):v;
+      syncControls(); update(); if(P().advanced&&it.k==="N") renderYearlyTable();
     });
-    num.addEventListener("change", function(){ num.value=params[it.k]; });
-    rng.addEventListener("input", function(){ params[it.k]=Number(rng.value); syncControls(); update(); if(advanced&&it.k==="N") renderYearlyTable(); });
+    num.addEventListener("change", function(){ num.value=P().params[it.k]; });
+    rng.addEventListener("input", function(){ P().params[it.k]=Number(rng.value); syncControls(); update(); if(P().advanced&&it.k==="N") renderYearlyTable(); });
   });});
 }
 function syncControls(){
   GROUPS.forEach(function(g){ g.items.forEach(function(it){
     var num=document.getElementById("num_"+it.k);
     var rng=document.getElementById("rng_"+it.k);
-    if(document.activeElement!==num) num.value=params[it.k];
-    rng.value=params[it.k];
+    if(document.activeElement!==num) num.value=P().params[it.k];
+    rng.value=P().params[it.k];
   });});
 }
 
 /* ============ CALCULO ============ */
-function compute(){
+function computeProj(proj){
+  var params=proj.params;
   var dec=Object.assign({},params,{gp:params.gp/100,gq:params.gq/100,tax:params.tax/100});
-  if(advanced){
-    ensureYearly();
+  if(proj.advanced){
+    ensureYearly(proj);
     dec.yearly={
-      precio:yearly.precio.slice(),
-      cantidad:yearly.cantidad.slice(),
-      cv:yearly.cv.slice(),
-      CF:yearly.CF.slice(),
-      tax:yearly.tax.map(function(v){return v/100;})
+      precio:proj.yearly.precio.slice(),
+      cantidad:proj.yearly.cantidad.slice(),
+      cv:proj.yearly.cv.slice(),
+      CF:proj.yearly.CF.slice(),
+      tax:proj.yearly.tax.map(function(v){return v/100;})
     };
   }
   var r=buildCashflows(dec);
@@ -454,24 +525,27 @@ function compute(){
   var prcD=payback(r.flows,k);
   var inv=params.I0+params.KT;
   var ivan=inv?VAN/inv:0;
-  var maxRate=Math.max(40, Math.ceil(tirPct==null?20:tirPct)+10);
-  var curve=[]; for(var x=0;x<=maxRate;x++) curve.push({tasa:x, van:van(r.flows,x/100)});
-  var cf=r.flows.map(function(f,i){return {ano:i, fc:f};});
-  return {flows:r.flows, detail:r.detail, VAN:VAN, TIR:TIR, tirPct:tirPct, prcS:prcS, prcD:prcD, ivan:ivan, curve:curve, cf:cf, maxRate:maxRate, k:params.k};
+  return {flows:r.flows, detail:r.detail, VAN:VAN, TIR:TIR, tirPct:tirPct, prcS:prcS, prcD:prcD, ivan:ivan, k:params.k};
+}
+function makeCurve(flows,maxRate){
+  var curve=[];
+  for(var x=0;x<=maxRate;x++) curve.push({tasa:x, van:van(flows,x/100)});
+  return curve;
 }
 
 /* ============ GRAFICOS SVG ============ */
-function svgVAN(curve,k,tirPct,maxRate){
+function svgVAN(results,maxRate){
+  var multi=results.length>1;
   var W=660,H=280,Mt=18,Mr=20,Mb=38,Ml=66;
   var iw=W-Ml-Mr, ih=H-Mt-Mb;
   var xs=function(t){return Ml+(t/maxRate)*iw;};
-  var vals=curve.map(function(d){return d.van;});
-  var vmin=Math.min.apply(null,vals.concat([0])), vmax=Math.max.apply(null,vals.concat([0]));
+  var vals=[0];
+  results.forEach(function(r){ r.curve.forEach(function(d){ vals.push(d.van); }); });
+  var vmin=Math.min.apply(null,vals), vmax=Math.max.apply(null,vals);
   if(vmin===vmax){vmin-=1;vmax+=1;}
   var padv=(vmax-vmin)*0.08; vmin-=padv; vmax+=padv;
   var ys=function(v){return Mt+(1-(v-vmin)/(vmax-vmin))*ih;};
   var y0=ys(0);
-  var pts=curve.map(function(d){return xs(d.tasa).toFixed(1)+","+ys(d.van).toFixed(1);}).join(" ");
   var s="";
   for(var i=0;i<=4;i++){ var vv=vmin+(vmax-vmin)*i/4, y=ys(vv);
     s+='<line x1="'+Ml+'" y1="'+y.toFixed(1)+'" x2="'+(W-Mr)+'" y2="'+y.toFixed(1)+'" stroke="'+(i===0?'transparent':C.grisSoft)+'"/>';
@@ -481,39 +555,142 @@ function svgVAN(curve,k,tirPct,maxRate){
     s+='<text x="'+xx.toFixed(1)+'" y="'+(H-Mb+18)+'" text-anchor="middle" font-size="11" fill="'+C.muted+'">'+Math.round(tt)+'%</text>';
   }
   s+='<line x1="'+Ml+'" y1="'+y0.toFixed(1)+'" x2="'+(W-Mr)+'" y2="'+y0.toFixed(1)+'" stroke="'+C.gris+'" stroke-width="1"/>';
-  if(k<=maxRate){ var kx=xs(k);
-    s+='<line x1="'+kx.toFixed(1)+'" y1="'+Mt+'" x2="'+kx.toFixed(1)+'" y2="'+(H-Mb)+'" stroke="'+C.purpura+'" stroke-width="1.5" stroke-dasharray="5 4"/>';
-    s+='<text x="'+(kx+5).toFixed(1)+'" y="'+(Mt+12)+'" font-size="11" font-weight="700" fill="'+C.purpura+'">tasa '+pct(k)+'</text>';
-  }
-  s+='<polyline points="'+pts+'" fill="none" stroke="'+C.cian+'" stroke-width="2.5"/>';
-  if(tirPct!=null && tirPct>=0 && tirPct<=maxRate){ var tx=xs(tirPct);
-    s+='<circle cx="'+tx.toFixed(1)+'" cy="'+y0.toFixed(1)+'" r="6" fill="#fff" stroke="'+C.rojo+'" stroke-width="2.5"/>';
-    s+='<text x="'+tx.toFixed(1)+'" y="'+(y0-12).toFixed(1)+'" text-anchor="middle" font-size="11" font-weight="700" fill="'+C.rojo+'">TIR '+pct(tirPct)+'</text>';
-  }
+  // líneas de tasa de descuento (una por valor distinto)
+  var kinfo=[];
+  results.forEach(function(r,idx){
+    for(var q=0;q<kinfo.length;q++){ if(kinfo[q].k===r.k) return; }
+    kinfo.push({k:r.k, color:PCOLORS[idx]});
+  });
+  kinfo.forEach(function(o,idx){
+    if(o.k>maxRate) return;
+    var kx=xs(o.k);
+    var col=kinfo.length===1?C.purpura:o.color;
+    s+='<line x1="'+kx.toFixed(1)+'" y1="'+Mt+'" x2="'+kx.toFixed(1)+'" y2="'+(H-Mb)+'" stroke="'+col+'" stroke-width="1.5" stroke-dasharray="5 4"/>';
+    var lx=kx+5, anchor="start";
+    if(kx>W-Mr-80){ lx=kx-5; anchor="end"; }
+    s+='<text x="'+lx.toFixed(1)+'" y="'+(Mt+12+idx*13)+'" text-anchor="'+anchor+'" font-size="11" font-weight="700" fill="'+col+'">tasa '+pct(o.k)+'</text>';
+  });
+  // curvas de VAN
+  results.forEach(function(r,idx){
+    var pts=r.curve.map(function(d){return xs(d.tasa).toFixed(1)+","+ys(d.van).toFixed(1);}).join(" ");
+    s+='<polyline points="'+pts+'" fill="none" stroke="'+PCOLORS[idx]+'" stroke-width="2.5"/>';
+  });
+  // marcadores de TIR
+  results.forEach(function(r,idx){
+    if(r.tirPct==null||r.tirPct<0||r.tirPct>maxRate) return;
+    var tx=xs(r.tirPct);
+    if(multi){
+      s+='<circle cx="'+tx.toFixed(1)+'" cy="'+y0.toFixed(1)+'" r="5" fill="#fff" stroke="'+PCOLORS[idx]+'" stroke-width="2.5"><title>TIR '+esc(projects[idx].name)+': '+pct(r.tirPct)+'</title></circle>';
+    } else {
+      s+='<circle cx="'+tx.toFixed(1)+'" cy="'+y0.toFixed(1)+'" r="6" fill="#fff" stroke="'+C.rojo+'" stroke-width="2.5"/>';
+      s+='<text x="'+tx.toFixed(1)+'" y="'+(y0-12).toFixed(1)+'" text-anchor="middle" font-size="11" font-weight="700" fill="'+C.rojo+'">TIR '+pct(r.tirPct)+'</text>';
+    }
+  });
   return '<svg viewBox="0 0 '+W+' '+H+'" width="100%" preserveAspectRatio="xMidYMid meet" font-family="Ubuntu,sans-serif">'+s+'</svg>';
 }
-function svgCF(cf){
+function svgCF(results){
+  var multi=results.length>1;
   var W=660,H=240,Mt=16,Mr=18,Mb=34,Ml=66;
-  var iw=W-Ml-Mr, ih=H-Mt-Mb, n=cf.length;
-  var vals=cf.map(function(d){return d.fc;});
-  var vmin=Math.min.apply(null,vals.concat([0])), vmax=Math.max.apply(null,vals.concat([0]));
+  var iw=W-Ml-Mr, ih=H-Mt-Mb;
+  var n=0, vals=[0];
+  results.forEach(function(r){ n=Math.max(n,r.flows.length); r.flows.forEach(function(f){ vals.push(f); }); });
+  var vmin=Math.min.apply(null,vals), vmax=Math.max.apply(null,vals);
   if(vmin===vmax){vmin-=1;vmax+=1;}
   var padv=(vmax-vmin)*0.08; vmin-=padv; vmax+=padv;
   var ys=function(v){return Mt+(1-(v-vmin)/(vmax-vmin))*ih;};
-  var y0=ys(0), slot=iw/n, bw=Math.min(slot*0.6,46);
+  var y0=ys(0), slot=iw/n;
   var s="";
   for(var i=0;i<=4;i++){ var vv=vmin+(vmax-vmin)*i/4, y=ys(vv);
     s+='<line x1="'+Ml+'" y1="'+y.toFixed(1)+'" x2="'+(W-Mr)+'" y2="'+y.toFixed(1)+'" stroke="'+C.grisSoft+'"/>';
     s+='<text x="'+(Ml-8)+'" y="'+(y+3).toFixed(1)+'" text-anchor="end" font-size="11" fill="'+C.muted+'">'+moneyAxis(vv)+'</text>';
   }
-  cf.forEach(function(d,i){
-    var cx=Ml+slot*i+slot/2, x=cx-bw/2, yv=ys(d.fc), top=Math.min(yv,y0), h=Math.abs(yv-y0);
-    var fill=d.fc<0?C.rojo:C.cian;
-    s+='<rect x="'+x.toFixed(1)+'" y="'+top.toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+Math.max(h,0.5).toFixed(1)+'" rx="3" fill="'+fill+'"><title>Año '+d.ano+': '+money(d.fc)+'</title></rect>';
-    s+='<text x="'+cx.toFixed(1)+'" y="'+(H-Mb+18)+'" text-anchor="middle" font-size="11" fill="'+C.muted+'">'+d.ano+'</text>';
-  });
+  for(var t=0;t<n;t++){
+    var cx=Ml+slot*t+slot/2;
+    s+='<text x="'+cx.toFixed(1)+'" y="'+(H-Mb+18)+'" text-anchor="middle" font-size="11" fill="'+C.muted+'">'+t+'</text>';
+  }
+  if(multi){
+    var m=results.length;
+    var bw=Math.min((slot*0.8)/m, 18);
+    var off=(slot-bw*m)/2;
+    var w=Math.max(bw-1,1);
+    results.forEach(function(r,i){
+      r.flows.forEach(function(f,t){
+        var x=Ml+slot*t+off+bw*i, yv=ys(f), top=Math.min(yv,y0), h=Math.abs(yv-y0);
+        s+='<rect x="'+x.toFixed(1)+'" y="'+top.toFixed(1)+'" width="'+w.toFixed(1)+'" height="'+Math.max(h,0.5).toFixed(1)+'" rx="2" fill="'+PCOLORS[i]+'"><title>'+esc(projects[i].name)+' · Año '+t+': '+money(f)+'</title></rect>';
+      });
+    });
+  } else {
+    var bw1=Math.min(slot*0.6,46);
+    results[0].flows.forEach(function(f,t){
+      var cx=Ml+slot*t+slot/2, x=cx-bw1/2, yv=ys(f), top=Math.min(yv,y0), h=Math.abs(yv-y0);
+      var fill=f<0?C.rojo:C.cian;
+      s+='<rect x="'+x.toFixed(1)+'" y="'+top.toFixed(1)+'" width="'+bw1.toFixed(1)+'" height="'+Math.max(h,0.5).toFixed(1)+'" rx="3" fill="'+fill+'"><title>Año '+t+': '+money(f)+'</title></rect>';
+    });
+  }
   s+='<line x1="'+Ml+'" y1="'+y0.toFixed(1)+'" x2="'+(W-Mr)+'" y2="'+y0.toFixed(1)+'" stroke="'+C.gris+'" stroke-width="1"/>';
   return '<svg viewBox="0 0 '+W+' '+H+'" width="100%" preserveAspectRatio="xMidYMid meet" font-family="Ubuntu,sans-serif">'+s+'</svg>';
+}
+function dotHTML(i){ return '<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+PCOLORS[i]+';margin-right:2px;"></span>'; }
+function legendHTML(){
+  if(!isMulti()) return "";
+  var h='<div style="display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--gris);margin:0 0 6px;">';
+  projects.forEach(function(p,i){
+    h+='<span style="font-weight:'+(i===active?'700':'400')+'">'+dotHTML(i)+' '+esc(shortName(p.name))+'</span>';
+  });
+  return h+'</div>';
+}
+
+/* ============ COMPARACIONES ============ */
+function renderCompare(results){
+  var card=document.getElementById("compareCard");
+  if(!isMulti()){ card.style.display="none"; return; }
+  card.style.display="block";
+  var best=0;
+  results.forEach(function(r,i){ if(r.VAN>results[best].VAN) best=i; });
+  var html='<thead><tr><th class="l">Proyecto</th><th>VAN</th><th>TIR</th><th>Tasa</th><th>Recupero (desc.)</th><th>IVAN</th><th></th></tr></thead><tbody>';
+  results.forEach(function(r,i){
+    var p=projects[i], on=(i===active), ok=r.VAN>0;
+    html+='<tr data-i="'+i+'" class="cmp-row'+(on?' on':'')+'">'+
+      '<td class="l" style="font-weight:'+(on?'800':'600')+';white-space:nowrap;">'+dotHTML(i)+' '+esc(shortName(p.name))+(i===best?' <span title="Mejor VAN" style="color:'+C.naranja+'">★</span>':'')+'</td>'+
+      '<td style="font-weight:800;color:'+(ok?C.cian:C.rojo)+'">'+money(r.VAN)+'</td>'+
+      '<td>'+pct(r.tirPct)+'</td>'+
+      '<td>'+pct(r.k)+'</td>'+
+      '<td>'+yrs(r.prcD)+'</td>'+
+      '<td>'+r.ivan.toLocaleString("es-AR",{maximumFractionDigits:2})+'</td>'+
+      '<td><span style="background:'+(ok?C.cian:C.rojo)+';color:#fff;font-size:10px;font-weight:800;padding:3px 8px;border-radius:6px;white-space:nowrap;">'+(ok?'CONVIENE':'NO CONVIENE')+'</span></td>'+
+      '</tr>';
+  });
+  html+='</tbody>';
+  document.getElementById("compareTbl").innerHTML=html;
+}
+function renderParams(){
+  var card=document.getElementById("paramsCard");
+  if(!isMulti()){ card.style.display="none"; return; }
+  card.style.display="block";
+  if(!paramsOpen) return;
+  var html='<table><thead><tr><th class="l">Parámetro</th>';
+  projects.forEach(function(p,i){ html+='<th>'+dotHTML(i)+' '+esc(shortName(p.name))+'</th>'; });
+  html+='</tr></thead><tbody>';
+  GROUPS.forEach(function(g){
+    html+='<tr><td class="l" colspan="'+(projects.length+1)+'" style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:'+g.color+';padding-top:12px;">'+g.title+'</td></tr>';
+    g.items.forEach(function(it){
+      var cells=projects.map(function(p){
+        if(p.advanced && OVERRIDDEN.indexOf(it.k)>=0) return null; // reemplazado por la tabla año por año
+        return p.params[it.k];
+      });
+      var disp=cells.map(function(v){ return v==null?"por año":fmtParam(it.k,v); });
+      var allEq=disp.every(function(d){ return d===disp[0]; });
+      html+='<tr><td class="l"'+(allEq?'':' style="font-weight:700;"')+'>'+it.label+'</td>';
+      disp.forEach(function(d,i){
+        var st=cells[i]==null?'font-style:italic;':'';
+        st+=allEq?'color:var(--muted);':'background:#FFF4E3;font-weight:700;';
+        html+='<td style="'+st+'">'+d+'</td>';
+      });
+      html+='</tr>';
+    });
+  });
+  html+='</tbody></table><p class="foot">“por año”: ese proyecto usa valores cargados año por año (modo avanzado). Se resaltan los parámetros que difieren entre proyectos.</p>';
+  document.getElementById("paramsWrap").innerHTML=html;
 }
 
 /* ============ ACTUALIZAR UI ============ */
@@ -525,26 +702,45 @@ function setStat(id,val,sub,color){
   el.style.borderTopColor=color;
 }
 function update(){
-  var c=compute();
+  var multi=isMulti();
+  var results=projects.map(computeProj);
+  var maxRate=40;
+  results.forEach(function(r){ if(r.tirPct!=null) maxRate=Math.max(maxRate, Math.ceil(r.tirPct)+10); });
+  results.forEach(function(r){ r.curve=makeCurve(r.flows,maxRate); });
+
+  var proj=P(), c=results[active];
   var conviene=c.VAN>0;
   var acento=conviene?C.cian:C.rojo;
-  var tirAlk=c.tirPct==null?null:(c.tirPct>=params.k);
+  var tirAlk=c.tirPct==null?null:(c.tirPct>=proj.params.k);
 
   document.getElementById("stickybar").style.borderBottomColor=acento;
+  document.getElementById("vanLab").textContent=multi?"VAN · "+shortName(proj.name):"VAN";
   var vb=document.getElementById("vanBig"); vb.textContent=money(c.VAN); vb.style.color=acento;
   var vd=document.getElementById("verdict"); vd.textContent=conviene?"CONVIENE":"NO CONVIENE"; vd.style.background=acento;
   var tv=document.getElementById("tirvs");
   var sym = tirAlk==null?"":(tirAlk?"›":"‹");
-  tv.textContent=pct(c.tirPct)+" "+sym+" "+pct(params.k);
+  tv.textContent=pct(c.tirPct)+" "+sym+" "+pct(proj.params.k);
   tv.style.color = tirAlk==null?C.muted:(tirAlk?C.cian:C.rojo);
+
+  var st=document.getElementById("statsTitle");
+  if(multi){ st.style.display="block"; st.innerHTML='Resultados del proyecto activo · '+dotHTML(active)+' <b style="color:var(--gris)">'+esc(proj.name)+'</b>'; }
+  else { st.style.display="none"; }
+  document.getElementById("varsProjTag").innerHTML=multi?' · '+dotHTML(active)+' <span style="color:var(--gris)">'+esc(shortName(proj.name))+'</span>':"";
+  document.getElementById("flowProjTag").innerHTML=multi?' · '+dotHTML(active)+' <span style="color:var(--gris)">'+esc(shortName(proj.name))+'</span>':"";
+  document.getElementById("controlsCard").style.borderTop=multi?('3px solid '+PCOLORS[active]):"";
+  document.getElementById("caseLab").textContent=multi?"CASO DEL PROYECTO ACTIVO":"CASO";
+  document.getElementById("saveLab").textContent=multi?"GUARDAR PROYECTO ACTIVO":"GUARDAR PROYECTO";
 
   setStat("cVan", money(c.VAN), conviene?"Crea valor (> 0)":"Destruye valor (< 0)", acento);
   setStat("cTir", pct(c.tirPct), tirAlk==null?"no definida":(tirAlk?"supera la tasa":"por debajo de la tasa"), C.purpura);
   setStat("cPrc", yrs(c.prcD), "Simple: "+yrs(c.prcS), C.azul);
   setStat("cIvan", c.ivan.toLocaleString("es-AR",{maximumFractionDigits:2}), "VAN por $ invertido", C.naranja);
 
-  document.getElementById("chartVAN").innerHTML=svgVAN(c.curve, params.k, c.tirPct, c.maxRate);
-  document.getElementById("chartCF").innerHTML=svgCF(c.cf);
+  document.getElementById("chartVAN").innerHTML=legendHTML()+svgVAN(results,maxRate);
+  document.getElementById("chartCF").innerHTML=legendHTML()+svgCF(results);
+
+  renderCompare(results);
+  renderParams();
 
   if(tableOpen){
     var body="";
@@ -566,20 +762,95 @@ function update(){
   }
 }
 
+/* ============ PESTAÑAS DE PROYECTOS ============ */
+function buildTabs(){
+  var box=document.getElementById("tabs");
+  box.innerHTML="";
+  if(!isMulti()){ box.style.display="none"; return; }
+  box.style.display="flex";
+  projects.forEach(function(p,i){
+    var b=document.createElement("div");
+    b.className="ptab"+(i===active?" on":"");
+    if(i===active) b.style.borderColor=PCOLORS[i];
+    var dot=document.createElement("span"); dot.className="dot"; dot.style.background=PCOLORS[i];
+    var nm=document.createElement("span"); nm.textContent=p.name;
+    b.appendChild(dot); b.appendChild(nm);
+    if(i===active){
+      var ren=document.createElement("span"); ren.className="ren"; ren.textContent="✎"; ren.title="Renombrar";
+      ren.addEventListener("click", function(ev){ ev.stopPropagation(); startRename(i,b,nm,ren); });
+      b.appendChild(ren);
+    }
+    b.addEventListener("click", function(){ setActive(i); });
+    box.appendChild(b);
+  });
+}
+function startRename(i,tab,nm,ren){
+  var inp=document.createElement("input");
+  inp.type="text"; inp.value=projects[i].name; inp.maxLength=40;
+  tab.replaceChild(inp,nm); ren.style.display="none";
+  inp.addEventListener("click", function(ev){ ev.stopPropagation(); });
+  var done=false;
+  function commit(){
+    if(done) return; done=true;
+    var v=inp.value.trim();
+    if(v && v!==projects[i].name){ projects[i].name=v; projects[i].renamed=true; }
+    buildTabs(); update();
+  }
+  inp.addEventListener("keydown", function(ev){
+    if(ev.key==="Enter") commit();
+    if(ev.key==="Escape"){ done=true; buildTabs(); }
+  });
+  inp.addEventListener("blur", commit);
+  inp.focus(); inp.select();
+}
+function afterActiveChange(){
+  buildTabs();
+  buildPresetSelect();
+  var pn=PRESETS[P().preset];
+  document.getElementById("presetNote").textContent=pn?pn.nota:"";
+  syncControls();
+  setMode(P().advanced); // re-renderiza la tabla por año del proyecto activo y llama a update()
+}
+function setActive(i){
+  if(i===active||i<0||i>=projects.length) return;
+  active=i;
+  afterActiveChange();
+}
+function setCount(n){
+  n=clamp(Math.round(n),1,MAXP);
+  if(n===projects.length){ return; }
+  if(n>projects.length){
+    var src=P();
+    var base=src.name.replace(/\s\(\d+\)$/,"");
+    while(projects.length<n){
+      projects.push(cloneProject(src, base+" ("+(projects.length+1)+")"));
+    }
+    buildTabs(); update();
+  } else {
+    projects=projects.slice(0,n);
+    if(active>=n){ active=n-1; afterActiveChange(); }
+    else { buildTabs(); update(); }
+  }
+  document.getElementById("countSelect").value=String(projects.length);
+}
+
 /* ============ PRESETS / TOOLBAR ============ */
 function buildPresetSelect(){
   var sel=document.getElementById("presetSelect"), html="";
-  if(!PRESETS[currentPreset]) html+='<option value="">'+esc(currentPreset)+'</option>';
+  if(!PRESETS[P().preset]) html+='<option value="">'+esc(P().preset)+'</option>';
   Object.keys(PRESETS).forEach(function(n){ html+='<option value="'+n+'">'+n+'</option>'; });
   sel.innerHTML=html;
-  sel.value = PRESETS[currentPreset]?currentPreset:"";
+  sel.value = PRESETS[P().preset]?P().preset:"";
 }
 function applyPreset(name){
-  currentPreset=name;
-  params=Object.assign({}, PRESETS[name].data);
-  yearly=null;
+  var proj=P();
+  proj.preset=name;
+  proj.params=Object.assign({}, PRESETS[name].data);
+  proj.yearly=null;
+  if(!proj.renamed) proj.name=name;
+  buildTabs();
   buildPresetSelect();
-  document.getElementById("presetNote").textContent = PRESETS[name]?PRESETS[name].nota:"";
+  document.getElementById("presetNote").textContent=PRESETS[name].nota;
   syncControls(); setMode(false);
 }
 
@@ -602,17 +873,22 @@ function renderSaved(){
 function saveProj(){
   var name=document.getElementById("saveName").value.trim();
   if(!name) return;
-  var payload={_v:2, params:params, advanced:advanced, yearly:advanced?yearly:null};
+  var proj=P();
+  var payload={_v:2, params:proj.params, advanced:proj.advanced, yearly:proj.advanced?proj.yearly:null};
   try{ localStorage.setItem("proy:"+name, JSON.stringify(payload)); document.getElementById("saveName").value=""; renderSaved(); }catch(e){}
 }
 function loadProj(name){
   try{
     var raw=localStorage.getItem("proy:"+name); if(!raw) return;
     var obj=JSON.parse(raw);
-    if(obj && obj._v===2){ params=obj.params; yearly=obj.yearly||null; }
-    else { params=obj; yearly=null; } // formato anterior: solo params
-    params.N=Math.round(params.N); params.vidaUtil=Math.round(params.vidaUtil); // saneo de guardados que admitían decimales
-    currentPreset="— "+name; buildPresetSelect(); document.getElementById("presetNote").textContent="";
+    var proj=P();
+    if(obj && obj._v===2){ proj.params=obj.params; proj.yearly=obj.yearly||null; }
+    else { proj.params=obj; proj.yearly=null; } // formato anterior: solo params
+    proj.params.N=Math.round(proj.params.N); proj.params.vidaUtil=Math.round(proj.params.vidaUtil); // saneo de guardados que admitían decimales
+    proj.preset="— "+name;
+    if(!proj.renamed) proj.name=name;
+    buildTabs();
+    buildPresetSelect(); document.getElementById("presetNote").textContent="";
     syncControls(); setMode(!!(obj&&obj._v===2&&obj.advanced));
   }catch(e){}
 }
@@ -620,34 +896,49 @@ function delProj(name){ try{ localStorage.removeItem("proy:"+name); renderSaved(
 
 /* ============ INIT ============ */
 buildControls();
+buildTabs();
 buildPresetSelect();
-document.getElementById("presetNote").textContent=PRESETS[currentPreset].nota;
+document.getElementById("presetNote").textContent=PRESETS[P().preset].nota;
 syncControls();
 update();
 
+document.getElementById("countSelect").addEventListener("change", function(e){ setCount(Number(e.target.value)); });
 document.getElementById("presetSelect").addEventListener("change", function(e){ if(e.target.value) applyPreset(e.target.value); });
-document.getElementById("btnReset").addEventListener("click", function(){ if(PRESETS[currentPreset]) applyPreset(currentPreset); });
-document.getElementById("btnMode").addEventListener("click", function(){ setMode(!advanced); });
-document.getElementById("btnRegen").addEventListener("click", function(){ yearly=projectYearly(); renderYearlyTable(); update(); });
+document.getElementById("btnReset").addEventListener("click", function(){ if(PRESETS[P().preset]) applyPreset(P().preset); });
+document.getElementById("btnMode").addEventListener("click", function(){ setMode(!P().advanced); });
+document.getElementById("btnRegen").addEventListener("click", function(){ P().yearly=projectYearly(P()); renderYearlyTable(); update(); });
 document.getElementById("yearlyWrap").addEventListener("input", function(e){
   var inp=e.target; if(!inp.classList||!inp.classList.contains("yearly-in")) return;
   var key=inp.dataset.key, idx=Number(inp.dataset.idx);
-  if(!yearly||!yearly[key]) return;
+  var y=P().yearly;
+  if(!y||!y[key]) return;
   if(inp.value===""||isNaN(Number(inp.value))) return; // celda vacía mientras se tipea: no pisar el valor
-  yearly[key][idx]=Number(inp.value);
+  y[key][idx]=Number(inp.value);
   update();
 });
 document.getElementById("yearlyWrap").addEventListener("change", function(e){
   var inp=e.target; if(!inp.classList||!inp.classList.contains("yearly-in")) return;
   var key=inp.dataset.key, idx=Number(inp.dataset.idx);
-  if(!yearly||!yearly[key]) return;
-  inp.value=yearly[key][idx];
+  var y=P().yearly;
+  if(!y||!y[key]) return;
+  inp.value=y[key][idx];
 });
 document.getElementById("tableToggle").addEventListener("click", function(){
   tableOpen=!tableOpen;
   document.getElementById("tableWrap").style.display=tableOpen?"block":"none";
   document.getElementById("tableArrow").textContent=tableOpen?"▴":"▾";
   if(tableOpen) update();
+});
+document.getElementById("paramsToggle").addEventListener("click", function(){
+  paramsOpen=!paramsOpen;
+  document.getElementById("paramsWrap").style.display=paramsOpen?"block":"none";
+  document.getElementById("paramsArrow").textContent=paramsOpen?"▴":"▾";
+  if(paramsOpen) renderParams();
+});
+document.getElementById("compareTbl").addEventListener("click", function(e){
+  var tr=e.target.closest("tr");
+  if(!tr||tr.dataset.i==null) return;
+  setActive(Number(tr.dataset.i));
 });
 if(storageOk()){
   document.getElementById("saveWrap").style.display="block";
