@@ -373,10 +373,13 @@ function fmtParam(key,v){
 /* ============ ESTADO (multi-proyecto) ============ */
 var MAXP=5;
 var PCOLORS=[C.cian, C.naranja, C.purpura, C.azul, C.verde];
-var OVERRIDDEN = ["precio","cantidad","gp","gq","cv","CF","tax"]; // sliders que el modo por año reemplaza
+var PARAM_COL={precio:"precio",gp:"precio",cantidad:"cantidad",gq:"cantidad",cv:"cv",CF:"CF",tax:"tax"}; // control → columna de la tabla por año
+var OVERRIDDEN=Object.keys(PARAM_COL); // controles con contraparte en la tabla por año
+var YEARLY_COLS=["precio","cantidad","cv","CF","tax"];
+function freshDirty(){ return {precio:false,cantidad:false,cv:false,CF:false,tax:false}; }
 
 function newProject(name,data,preset){
-  return {name:name, preset:preset, params:Object.assign({},data), advanced:false, yearly:null, renamed:false};
+  return {name:name, preset:preset, params:Object.assign({},data), advanced:false, yearly:null, yearlyDirty:null, renamed:false};
 }
 function copyYearly(y){
   if(!y) return null;
@@ -386,6 +389,7 @@ function cloneProject(src,name){
   var p=newProject(name, src.params, src.preset);
   p.advanced=src.advanced;
   p.yearly=copyYearly(src.yearly);
+  p.yearlyDirty=src.yearlyDirty?Object.assign({},src.yearlyDirty):null;
   p.renamed=src.renamed;
   return p;
 }
@@ -413,11 +417,19 @@ function projectYearly(proj){
 }
 function ensureYearly(proj){
   var N=proj.params.N;
-  if(!proj.yearly){ proj.yearly=projectYearly(proj); return; }
-  ["precio","cantidad","cv","CF","tax"].forEach(function(key){
-    var arr=proj.yearly[key];
-    if(arr.length>N){ proj.yearly[key]=arr.slice(0,N); }
-    else { while(arr.length<N) arr.push(arr.length?arr[arr.length-1]:proj.params[key]); }
+  if(!proj.yearly){ proj.yearly=projectYearly(proj); proj.yearlyDirty=freshDirty(); return; }
+  if(!proj.yearlyDirty) proj.yearlyDirty=freshDirty();
+  var proy=null;
+  YEARLY_COLS.forEach(function(key){
+    if(!proj.yearlyDirty[key]){
+      // columna sin ediciones manuales: sigue a los controles del modo simple
+      if(!proy) proy=projectYearly(proj);
+      proj.yearly[key]=proy[key];
+    } else {
+      var arr=proj.yearly[key];
+      if(arr.length>N){ proj.yearly[key]=arr.slice(0,N); }
+      else { while(arr.length<N) arr.push(arr.length?arr[arr.length-1]:proj.params[key]); }
+    }
   });
 }
 function buildYearlyTable(proj){
@@ -446,18 +458,25 @@ function buildYearlyTable(proj){
 function renderYearlyTable(){
   document.getElementById("yearlyWrap").innerHTML=buildYearlyTable(P());
 }
+function syncOverriddenDim(){
+  var proj=P();
+  OVERRIDDEN.forEach(function(k){
+    var d=document.getElementById("drv_"+k);
+    if(!d) return;
+    var dim=proj.advanced && !!(proj.yearlyDirty && proj.yearlyDirty[PARAM_COL[k]]);
+    d.style.opacity=dim?"0.45":"1";
+    d.title=dim?"Esa columna se editó a mano en la tabla; este control no la modifica (↻ Regenerar la recalcula).":"";
+  });
+}
 function setMode(adv){
   var proj=P();
   proj.advanced=adv;
-  if(adv){ if(!proj.yearly) proj.yearly=projectYearly(proj); renderYearlyTable(); }
+  if(adv) renderYearlyTable();
   document.getElementById("yearlyWrap").style.display=adv?"block":"none";
   document.getElementById("btnMode").textContent=adv?"◂ Volver a modo simple":"Editar por año ▸";
   document.getElementById("btnRegen").style.display=adv?"inline-flex":"none";
-  document.getElementById("modeHint").textContent=adv?"Editás cada año a mano; las tasas de crecimiento se ignoran.":"";
-  OVERRIDDEN.forEach(function(k){
-    var d=document.getElementById("drv_"+k);
-    if(d){ d.style.opacity=adv?"0.45":"1"; d.title=adv?"En modo por año este valor se ignora (sirve para regenerar la tabla).":""; }
-  });
+  document.getElementById("modeHint").textContent=adv?"La tabla sigue a los controles; las columnas que edites a mano quedan fijas (↻ Regenerar las recalcula).":"";
+  syncOverriddenDim();
   update();
 }
 
@@ -487,10 +506,10 @@ function buildControls(){
       if(num.value===""||isNaN(Number(num.value))) return; // campo vacío mientras se tipea: no pisar el valor
       var v=clamp(Number(num.value), r.min, r.max);
       P().params[it.k]=r.int?Math.round(v):v;
-      syncControls(); update(); if(P().advanced&&it.k==="N") renderYearlyTable();
+      syncControls(); update(); if(P().advanced&&(it.k==="N"||PARAM_COL[it.k])) renderYearlyTable();
     });
     num.addEventListener("change", function(){ num.value=P().params[it.k]; });
-    rng.addEventListener("input", function(){ P().params[it.k]=Number(rng.value); syncControls(); update(); if(P().advanced&&it.k==="N") renderYearlyTable(); });
+    rng.addEventListener("input", function(){ P().params[it.k]=Number(rng.value); syncControls(); update(); if(P().advanced&&(it.k==="N"||PARAM_COL[it.k])) renderYearlyTable(); });
   });});
 }
 function syncControls(){
@@ -675,7 +694,8 @@ function renderParams(){
     html+='<tr><td class="l" colspan="'+(projects.length+1)+'" style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:'+g.color+';padding-top:12px;">'+g.title+'</td></tr>';
     g.items.forEach(function(it){
       var cells=projects.map(function(p){
-        if(p.advanced && OVERRIDDEN.indexOf(it.k)>=0) return null; // reemplazado por la tabla año por año
+        var col=PARAM_COL[it.k];
+        if(p.advanced && col && p.yearlyDirty && p.yearlyDirty[col]) return null; // columna editada a mano
         return p.params[it.k];
       });
       var disp=cells.map(function(v){ return v==null?"por año":fmtParam(it.k,v); });
@@ -689,7 +709,7 @@ function renderParams(){
       html+='</tr>';
     });
   });
-  html+='</tbody></table><p class="foot">“por año”: ese proyecto usa valores cargados año por año (modo avanzado). Se resaltan los parámetros que difieren entre proyectos.</p>';
+  html+='</tbody></table><p class="foot">“por año”: esa variable fue editada a mano año por año en ese proyecto. Se resaltan los parámetros que difieren entre proyectos.</p>';
   document.getElementById("paramsWrap").innerHTML=html;
 }
 
@@ -851,7 +871,7 @@ function applyPreset(name){
   var proj=P();
   proj.preset=name;
   proj.params=Object.assign({}, PRESETS[name].data);
-  proj.yearly=null;
+  proj.yearly=null; proj.yearlyDirty=null;
   if(!proj.renamed) proj.name=name;
   buildTabs();
   buildPresetSelect();
@@ -879,7 +899,7 @@ function saveProj(){
   var name=document.getElementById("saveName").value.trim();
   if(!name) return;
   var proj=P();
-  var payload={_v:2, params:proj.params, advanced:proj.advanced, yearly:proj.advanced?proj.yearly:null};
+  var payload={_v:2, params:proj.params, advanced:proj.advanced, yearly:proj.advanced?proj.yearly:null, yearlyDirty:proj.advanced?proj.yearlyDirty:null};
   try{ localStorage.setItem("proy:"+name, JSON.stringify(payload)); document.getElementById("saveName").value=""; renderSaved(); }catch(e){}
 }
 function loadProj(name){
@@ -887,8 +907,14 @@ function loadProj(name){
     var raw=localStorage.getItem("proy:"+name); if(!raw) return;
     var obj=JSON.parse(raw);
     var proj=P();
-    if(obj && obj._v===2){ proj.params=obj.params; proj.yearly=obj.yearly||null; }
-    else { proj.params=obj; proj.yearly=null; } // formato anterior: solo params
+    if(obj && obj._v===2){
+      proj.params=obj.params; proj.yearly=obj.yearly||null;
+      var d=obj.yearlyDirty;
+      if(!proj.yearly) proj.yearlyDirty=null;
+      else if(d) proj.yearlyDirty={precio:!!d.precio,cantidad:!!d.cantidad,cv:!!d.cv,CF:!!d.CF,tax:!!d.tax};
+      else proj.yearlyDirty={precio:true,cantidad:true,cv:true,CF:true,tax:true}; // guardado viejo: la tabla se conserva tal cual
+    }
+    else { proj.params=obj; proj.yearly=null; proj.yearlyDirty=null; } // formato anterior: solo params
     proj.params.N=Math.round(proj.params.N); proj.params.vidaUtil=Math.round(proj.params.vidaUtil); // saneo de guardados que admitían decimales
     proj.preset="— "+name;
     if(!proj.renamed) proj.name=name;
@@ -911,7 +937,10 @@ document.getElementById("countSelect").addEventListener("change", function(e){ s
 document.getElementById("presetSelect").addEventListener("change", function(e){ if(e.target.value) applyPreset(e.target.value); });
 document.getElementById("btnReset").addEventListener("click", function(){ if(PRESETS[P().preset]) applyPreset(P().preset); });
 document.getElementById("btnMode").addEventListener("click", function(){ setMode(!P().advanced); });
-document.getElementById("btnRegen").addEventListener("click", function(){ P().yearly=projectYearly(P()); renderYearlyTable(); update(); });
+document.getElementById("btnRegen").addEventListener("click", function(){
+  var p=P(); p.yearly=projectYearly(p); p.yearlyDirty=freshDirty();
+  renderYearlyTable(); syncOverriddenDim(); update();
+});
 document.getElementById("yearlyWrap").addEventListener("input", function(e){
   var inp=e.target; if(!inp.classList||!inp.classList.contains("yearly-in")) return;
   var key=inp.dataset.key, idx=Number(inp.dataset.idx);
@@ -919,6 +948,8 @@ document.getElementById("yearlyWrap").addEventListener("input", function(e){
   if(!y||!y[key]) return;
   if(inp.value===""||isNaN(Number(inp.value))) return; // celda vacía mientras se tipea: no pisar el valor
   y[key][idx]=Number(inp.value);
+  if(!P().yearlyDirty) P().yearlyDirty=freshDirty();
+  if(!P().yearlyDirty[key]){ P().yearlyDirty[key]=true; syncOverriddenDim(); } // la columna queda fija: editada a mano
   update();
 });
 document.getElementById("yearlyWrap").addEventListener("change", function(e){
