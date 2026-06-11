@@ -790,15 +790,20 @@ function startRename(i,tab,nm,ren){
   tab.replaceChild(inp,nm); ren.style.display="none";
   inp.addEventListener("click", function(ev){ ev.stopPropagation(); });
   var done=false;
+  // se muta la pestaña en el lugar (sin buildTabs): así un clic en otra
+  // pestaña durante el renombre no pierde su destino al reconstruir el DOM
+  function close(){ if(inp.parentNode===tab) tab.replaceChild(nm,inp); ren.style.display=""; }
   function commit(){
     if(done) return; done=true;
     var v=inp.value.trim();
-    if(v && v!==projects[i].name){ projects[i].name=v; projects[i].renamed=true; }
-    buildTabs(); update();
+    var changed=(v && v!==projects[i].name);
+    if(changed){ projects[i].name=v; projects[i].renamed=true; nm.textContent=v; }
+    close();
+    if(changed) update();
   }
   inp.addEventListener("keydown", function(ev){
     if(ev.key==="Enter") commit();
-    if(ev.key==="Escape"){ done=true; buildTabs(); }
+    if(ev.key==="Escape"){ done=true; close(); }
   });
   inp.addEventListener("blur", commit);
   inp.focus(); inp.select();
